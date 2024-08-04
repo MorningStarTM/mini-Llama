@@ -23,6 +23,15 @@ class ModelArgs:
     device: str = None
 
 
+def precompute_theta_pos_frequencies(head_dim:int, seq_len:int, device:str, theta:float = 10000.0):
+    assert head_dim % 2 == 0 , "Dimension must be divisible by 2"
+
+    theta_numerator = torch.arange(0, head_dim, 2).float()
+    theta = 1.0 / (theta ** (theta_numerator / head_dim)).to(device)
+    m = torch.arange(seq_len, device=device)
+    freqs = torch.outer(m, theta).float()
+    freqs_complex = torch.polar(torch.ones_like(freqs), freqs)
+    return freqs_complex
 
 class Transformer(nn.Module):
     def __init__(self, args:ModelArgs) -> None:
