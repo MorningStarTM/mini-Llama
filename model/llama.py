@@ -22,4 +22,44 @@ class ModelArgs:
     max_seq_len: int = 512
     device: str = None
 
-    
+
+
+class Transformer(nn.Module):
+    def __init__(self, args:ModelArgs) -> None:
+        super().__init__()
+
+        assert args.vocab_size != -1, "Vocab size must be set"
+
+        self.args = args
+        self.vocab_size = args.vocab_size
+        self.n_layers = args.n_layers
+        self.tok_embedding = nn.Embedding(self.vocab_size, args.dim)
+
+        self.layers = nn.ModuleList()
+        for _ in range(args.n_layers):
+            self.layers.append(EncoderBlock(args))
+
+        self.norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.ouput = nn.Linear(args.dim, self.vocab_size, bias=True)
+
+        self.freqs_complex = precompute_theta_pos_frequencies(self.args.dim // self/args.n_heads, self.args.max_seq_len * 2, device=self.args.device)
+
+    def forward(self, token:torch.Tensor, start_pos: int):
+        #(B, seg_len)
+        batch_size, seq_len = token.shape
+        assert seq_len == 1, "only one token at a time can be processed"
+
+        # (B, seq_len) -> (B, Seq_len, Dim)
+        h = self.tok_embedding(token)
+
+        # Retrieve the pairss (m, theta) corresponding to the positions [start_pos, start_pos+seq_len]
+        freqs_complex = self.freqs_complex[start_pos : start_pos + seq_len]
+
+        for layer in self.layers:
+            h = layer(h, start_pos, freqs_complex)
+
+        h = self.norm(h)
+        output = self.ouput(h).float()
+        return output
+
+        
